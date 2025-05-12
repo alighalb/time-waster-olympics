@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Time-Waster Olympics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
+    import {
+      getAuth,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      doc,
+      setDoc,
+      getDoc,
+      getDocs,
+      query,
+      orderBy,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDyoOnsDUJjdtQgkKvDgOq3kOLc1sBZg2Q",
+      authDomain: "time-waster-olympics.firebaseapp.com",
+      projectId: "time-waster-olympics",
+      storageBucket: "time-waster-olympics.appspot.com",
+      messagingSenderId: "168276208012",
+      appId: "1:168276208012:web:b86fbbc845feb7b03b0ea9"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    let clicks = 0;
+    let timeLeft = 30;
+    let started = false;
+    let timer;
+    let currentUser = null;
+    let selectedGif = "";
+
+    window.randomGif = async () => {
+      const res = await fetch("https://api.giphy.com/v1/gifs/random?api_key=YLZILNf5lCy2M908P6Z5FTA4jCKjtO4H&tag=meme&rating=g");
+      const data = await res.json();
+      selectedGif = data.data.images.fixed_height_small.url;
+      document.getElementById("previewGif").src = selectedGif;
+    };
+
+    window.registerOrLogin = async () => {
+      const username = document.getElementById("usernameInput").value.trim();
+      const password = document.getElementById("passwordInput").value.trim();
+      if (!username || !password) return;
+
+      const emailFake = `${username}@waster.com`;
+
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, emailFake, password);
+        await setDoc(doc(db, "users", cred.user.uid), {
+          username,
+          gif: selectedGif,
+          highScore: 0
+        });
+        currentUser = cred.user;
+        loadGame();
+      } catch (e) {
+        if (e.code === "auth/email-already-in-use") {
+          const cred = await signInWithEmailAndPassword(auth, emailFake, password);
+          currentUser = cred.user;
+          loadGame();
+        } else {
+          alert("Error: " + e.message);
+        }
+      }
+    };
+
+    async function loadGame() {
+      const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+      const data = userDoc.data();
+      selectedGif = data.gif;
+      document.getElementById("loginPopup").classList.add("hidden");
+      document.getElementById("gameSection").classList.remove("hidden");
+      document.getElementById("playerGif").src = selectedGif;
+      document.getElementById("playerName").textContent = data.username;
+      document.getElementById("playerScore").textContent = data.highScore;
+      fetchScores();
+    }
+
+    window.startOrClick = async () => {
+      if (!started) {
+        started = true;
+        clicks = 0;
+        timeLeft = 30;
+        document.getElementById("clicks").textContent = clicks;
+        document.getElementById("time").textContent = timeLeft;
+
+        timer = setInterval(async () => {
+  if (timeLeft > 0) {
+    timeLeft--;
+    document.getElementById("time").textContent = timeLeft;
+  } else {
+    clearInterval(timer);
+    document.getElementById("clickBtn").disabled = true;
+    const userRef = doc(db, "users", currentUser.uid);
+    const userDoc = await getDoc(userRef);
+    const oldScore = userDoc.data().highScore || 0;
+    const newScore = Math.max(clicks, oldScore);
+    await setDoc(userRef, { highScore: newScore }, { merge: true });
+    document.getElementById("playerScore").textContent = newScore;
+    fetchScores();
+  }
+}, 1000);
+      }
+      clicks++;
+      document.getElementById("clicks").textContent = clicks;
+    };
+
+    async function fetchScores() {
+      const q = query(collection(db, "users"), orderBy("highScore", "desc"));
+      const snapshot = await getDocs(q);
+      const list = document.getElementById("scoresList");
+      list.innerHTML = "";
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const gif = data.gif ? `<img src="${data.gif}" width="24" height="24" class="inline-block mr-2 rounded" />` : "";
+        list.innerHTML += `<li class="text-left text-pink-700 font-mono">${gif}${data.username} wasted ${data.highScore} clicks</li>`;
+      });
+    }
+
+    onAuthStateChanged(auth, user => {
+      if (user) {
+        currentUser = user;
+        loadGame();
+      }
+    });
+  </script>
+
+  <style>
+    body {
+      background: linear-gradient(to right, #ffdeeb, #fff3cd);
+      font-family: Comic Sans MS, cursive, sans-serif;
+    }
+  </style>
+</head>
+<body class="p-4">
+
+  <!-- LOGIN POPUP -->
+  <div id="loginPopup" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm text-center">
+      <h2 class="text-2xl font-bold text-purple-600 mb-4">Welcome to the Madness</h2>
+      <input id="usernameInput" placeholder="Username" class="border w-full p-2 rounded mb-3" />
+      <input id="passwordInput" type="password" placeholder="Password" class="border w-full p-2 rounded mb-3" />
+      <button onclick="randomGif()" class="bg-yellow-400 text-black px-4 py-2 mb-3 rounded-full">🎲 Random GIF</button>
+      <img id="previewGif" src="" class="mx-auto mb-3 rounded-xl max-h-28" />
+      <button onclick="registerOrLogin()" class="bg-purple-500 text-white px-4 py-2 rounded-full">Continue</button>
+    </div>
+  </div>
+
+  <!-- GAME SECTION -->
+  <div id="gameSection" class="hidden text-center max-w-xl mx-auto bg-white p-6 rounded-2xl shadow-xl">
+    <h1 class="text-4xl font-extrabold text-purple-600">Time-Waster Olympics 🥇</h1>
+    <p class="italic text-sm text-gray-600">Click fast, accomplish nothing!</p>
+    <img id="playerGif" class="mx-auto mt-2 mb-2 rounded-xl max-h-32" />
+    <h3 class="text-lg text-blue-800 font-bold mb-2">👤 <span id="playerName"></span></h3>
+    <h3 class="text-md text-green-700 mb-4">🏆 High Score: <span id="playerScore">0</span></h3>
+
+    <button id="clickBtn" onclick="startOrClick()" class="bg-pink-500 hover:bg-pink-600 text-white px-6 py-3 rounded-full text-xl mb-4">
+      Click Like There's No Tomorrow
+    </button>
+
+    <div class="mb-4">
+      <p class="text-lg">⏱ Time Left: <span id="time">30</span>s</p>
+      <p class="text-xl mt-2">🖱 Clicks: <span id="clicks">0</span></p>
+    </div>
+
+    <hr class="my-4 border-t-2 border-dotted">
+
+    <h2 class="text-2xl font-bold text-red-500 mb-2">🏆 Top Wasterboard</h2>
+    <ul id="scoresList" class="list-disc pl-5 text-left text-sm space-y-1"></ul>
+  </div>
+
+</body>
+</html>
