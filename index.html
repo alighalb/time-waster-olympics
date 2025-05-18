@@ -35,7 +35,15 @@
       messagingSenderId: "168276208012",
       appId: "1:168276208012:web:b86fbbc845feb7b03b0ea9"
     };
-
+ window.resetGame = () => {
+  clearInterval(timer);         // Stop current timer if running
+  clicks = 0;
+  timeLeft = 30;
+  started = false;
+  document.getElementById("clicks").textContent = clicks;
+  document.getElementById("time").textContent = timeLeft;
+  document.getElementById("clickBtn").disabled = false; // allow player to click to start again
+};
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -171,8 +179,9 @@
     </div>
   </div>
  <!-- Replay Button -->
+  <!-- Replay Button -->
   <div class="text-left mb-4">
-    <button onclick="window.location.reload()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full">
+    <button onclick="resetGame()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full">
       🔁 Replay
     </button>
   </div>
