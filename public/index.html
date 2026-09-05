@@ -87,32 +87,18 @@
 
     <!-- Shown only when the API cannot be reached (e.g. static host, no backend configured). -->
     <div id="setupBanner" class="hidden w-full max-w-2xl rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
-      <p class="font-bold">No backend connected.</p>
+      <p class="font-bold">No database connected.</p>
       <p class="mt-1 text-amber-200/90">
-        Netlify serves static files only, so there is no Node process here to answer
-        <code class="rounded bg-black/30 px-1">/api</code> or hold a WebSocket open.
-        Deploy the backend once, then point this page at it.
+        The API is deployed, but it has nowhere to store accounts and scores yet.
+        Add a Postgres store to this Vercel project &mdash; it wires itself up automatically.
       </p>
       <ol class="mt-3 space-y-1.5 text-amber-200/90">
-        <li>
-          <span class="font-semibold">1.</span>
-          <a href="https://render.com/deploy?repo=https://github.com/alighalb/time-waster-olympics"
-             target="_blank" rel="noopener"
-             class="ml-1 inline-block rounded-lg bg-amber-400 px-3 py-1 text-xs font-bold text-amber-950 transition active:scale-95 hover:bg-amber-300">
-            Deploy backend to Render (free)
-          </a>
-        </li>
-        <li><span class="font-semibold">2.</span> Copy the URL Render gives you.</li>
-        <li>
-          <span class="font-semibold">3.</span> Put it in
-          <code class="rounded bg-black/30 px-1">public/config.js</code> and push:
-          <code class="mt-1 block rounded bg-black/40 px-2 py-1 text-xs">window.TWO_API_BASE = "https://your-app.onrender.com";</code>
-        </li>
+        <li><span class="font-semibold">1.</span> Vercel dashboard &rarr; your project &rarr; <span class="font-semibold">Storage</span> &rarr; Create Database &rarr; <span class="font-semibold">Postgres</span>.</li>
+        <li><span class="font-semibold">2.</span> Connect it to this project. <code class="rounded bg-black/30 px-1">POSTGRES_URL</code> is injected for you.</li>
+        <li><span class="font-semibold">3.</span> Settings &rarr; Environment Variables &rarr; add <code class="rounded bg-black/30 px-1">JWT_SECRET</code> (any long random string).</li>
+        <li><span class="font-semibold">4.</span> Redeploy. Tables are created on the first request.</li>
       </ol>
-      <p class="mt-3 text-xs text-amber-200/70">
-        Or skip Netlify entirely &mdash; the Render URL serves this same page and just works.
-      </p>
-      <p class="mt-1 text-xs text-amber-200/70">Tried: <span id="setupBannerTarget" class="font-mono"></span></p>
+      <p class="mt-3 text-xs text-amber-200/70">Tried: <span id="setupBannerTarget" class="font-mono"></span></p>
     </div>
 
     <!-- ===================== AUTH SCREEN ===================== -->
@@ -232,7 +218,7 @@
         </button>
       </section>
 
-      <!-- Leaderboard: fed entirely by WebSocket pushes, never polled. -->
+      <!-- Leaderboard: refreshed on a timer; serverless cannot push. -->
       <aside class="panel rounded-3xl p-5 sm:p-6">
         <div class="mb-4 flex items-center justify-between">
           <h2 class="text-lg font-black">Top 10</h2>
@@ -265,7 +251,7 @@
   const ROUND_SECONDS = 15;
   const URGENT_AT = 5;
   const TOKEN_KEY = 'two_token';
-  const MAX_WS_RETRIES = 6;
+  const POLL_MS = 4000;   // leaderboard auto-refresh interval
 
   const $ = (id) => document.getElementById(id);
 
@@ -296,9 +282,8 @@
     clicks: 0,
     remaining: ROUND_SECONDS,
     tick: null,
-    ws: null,
-    wsRetry: 0,
-    wsGaveUp: false,
+    poll: null,
+    pollFailures: 0,
   };
 
   // ---------------------------------------------------------------------
@@ -588,11 +573,11 @@
   el.replayBtn.addEventListener('click', resetRound);
 
   // ---------------------------------------------------------------------
-  // Leaderboard over WebSockets (no polling)
+  // Leaderboard polling
   // ---------------------------------------------------------------------
   function setLive(status) {
     const map = {
-      live:    ['bg-emerald-400', 'live'],
+      live:    ['bg-emerald-400', 'auto-refresh'],
       connecting: ['bg-amber-400', 'connecting'],
       offline: ['bg-red-500', 'offline'],
     };
@@ -644,40 +629,29 @@
     el.board.replaceChildren(frag);
   }
 
-  function socketUrl() {
-    if (API_ORIGIN) return API_ORIGIN.replace(/^http/, 'ws') + '/ws';
-    return (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws';
+  // Serverless functions cannot hold a connection open, so the board is refreshed on a
+  // timer instead. Polling pauses while the tab is hidden and resumes on focus.
+  async function refreshLeaderboard() {
+    if (document.hidden) return;
+    try {
+      const data = await api('/leaderboard');
+      renderLeaderboard(data.leaderboard);
+      state.pollFailures = 0;
+      setLive('live');
+    } catch {
+      // A brief blip should not blank the board; only go quiet after repeated misses.
+      if (++state.pollFailures >= 3) setLive('offline');
+    }
   }
 
-  function connectSocket() {
-    const ws = new WebSocket(socketUrl());
-    state.ws = ws;
-    setLive('connecting');
+  function startPolling() {
+    if (state.poll) clearInterval(state.poll);
+    state.poll = setInterval(refreshLeaderboard, POLL_MS);
 
-    ws.addEventListener('open', () => { state.wsRetry = 0; setLive('live'); });
-
-    ws.addEventListener('message', (event) => {
-      let msg;
-      try { msg = JSON.parse(event.data); } catch { return; }
-      if (msg && msg.type === 'leaderboard') renderLeaderboard(msg.leaderboard);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshLeaderboard();
     });
-
-    ws.addEventListener('close', () => {
-      setLive('offline');
-      if (state.wsGaveUp) return;
-
-      // A server that is merely restarting comes back within a few tries. One that
-      // does not exist never will, so stop rather than spamming the console.
-      if (state.wsRetry >= MAX_WS_RETRIES) {
-        state.wsGaveUp = true;
-        setLive('offline');
-        return;
-      }
-      const wait = Math.min(1000 * Math.pow(2, state.wsRetry++), 15000);
-      setTimeout(connectSocket, wait);
-    });
-
-    ws.addEventListener('error', () => ws.close());
+    window.addEventListener('focus', refreshLeaderboard);
   }
 
   // ---------------------------------------------------------------------
@@ -694,8 +668,7 @@
     setMode('login');
     resetGifPreview();
 
-    // Probe first. Opening a WebSocket to a host that has no server just produces
-    // an unsuppressable console error per attempt, so only dial once the API answers.
+    // Confirm the API answers before letting anyone try to log in.
     try {
       const probe = await api('/leaderboard');
       renderLeaderboard(probe.leaderboard);
@@ -703,7 +676,7 @@
       showBackendWarning();
       return;
     }
-    connectSocket();
+    startPolling();
 
     if (!state.token) return;
 

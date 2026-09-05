@@ -1,22 +1,20 @@
 {
   "name": "time-waster-olympics",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Time-Waster Olympics — self-hosted backend (Express + SQLite + JWT + WebSockets)",
-  "main": "server.js",
-  "type": "commonjs",
+  "description": "Time-Waster Olympics \u2014 Vercel serverless backend (Postgres + JWT)",
+  "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "vercel dev",
+    "start": "vercel dev",
+    "test": "node --experimental-test-module-mocks --test \"test/*.test.js\""
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
+    "@vercel/postgres": "^0.10.0",
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.5.0",
-    "express": "^4.21.1",
-    "jsonwebtoken": "^9.0.2",
-    "ws": "^8.18.0"
+    "jsonwebtoken": "^9.0.2"
   }
 }
