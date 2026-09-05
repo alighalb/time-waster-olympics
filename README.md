@@ -12,14 +12,28 @@ Click-frenzy game with accounts and a shared leaderboard, running entirely on Ve
 1. Import this repo at [vercel.com/new](https://vercel.com/new).
 2. **Storage → Create Database → Postgres**, connected to this project.
    Vercel injects `POSTGRES_URL` automatically.
-3. **Settings → Environment Variables →** add `JWT_SECRET`, any long random string:
-   ```bash
-   openssl rand -hex 32
-   ```
-4. Redeploy. The `users` table is created on the first request.
+3. Redeploy. The `users` table is created on the first request.
 
-Until steps 2–3 are done the page loads and shows a banner explaining what is missing,
-rather than failing silently.
+That is the only required configuration. Until it is done the page loads and shows a
+banner naming exactly what is missing, rather than failing silently.
+
+### JWT_SECRET (optional)
+
+If `JWT_SECRET` is set it is used to sign tokens. If it is not, a key is derived by
+HMAC from the database connection string — stable across serverless instances, already
+secret, and always present when the app can run at all. Rotating the database password
+therefore rotates the signing key and logs everyone out; set `JWT_SECRET` explicitly to
+decouple the two:
+
+```bash
+openssl rand -hex 32
+```
+
+### A note on preview URLs
+
+Vercel protects preview deployments with SSO, which redirects the page's own API calls
+to a login page. If the banner says it cannot reach the API, open the production URL, or
+turn off Settings → Deployment Protection.
 
 ## Local development
 
