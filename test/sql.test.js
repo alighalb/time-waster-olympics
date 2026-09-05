@@ -28,3 +28,25 @@ test('a query with no interpolation passes through unchanged', () => {
   assert.equal(q.text, 'SELECT 1');
   assert.deepEqual(q.values, []);
 });
+
+test('sslmode is stripped so it cannot override the ssl option', async () => {
+  const { normalizeConnectionString } = await import('../lib/sql.js');
+  const out = normalizeConnectionString(
+    'postgresql://postgres.abc:pw@aws-0.pooler.supabase.com:6543/postgres?sslmode=require'
+  );
+  assert.ok(!out.includes('sslmode'));
+  assert.ok(out.startsWith('postgresql://postgres.abc:pw@aws-0.pooler.supabase.com:6543/postgres'));
+});
+
+test('other query parameters survive normalisation', async () => {
+  const { normalizeConnectionString } = await import('../lib/sql.js');
+  const out = normalizeConnectionString('postgresql://u:p@h:6543/db?sslmode=require&application_name=two');
+  assert.ok(out.includes('application_name=two'));
+  assert.ok(!out.includes('sslmode'));
+});
+
+test('a non-URL connection string is passed through untouched', async () => {
+  const { normalizeConnectionString } = await import('../lib/sql.js');
+  const raw = 'host=localhost user=postgres dbname=two';
+  assert.equal(normalizeConnectionString(raw), raw);
+});
