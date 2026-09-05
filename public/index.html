@@ -91,13 +91,14 @@
       <p id="setupBannerTitle" class="font-bold">Server not configured.</p>
       <p id="setupBannerReason" class="mt-1 text-amber-200/90"></p>
       <ol id="setupSteps" class="mt-3 space-y-1.5 text-amber-200/90">
-        <li><span class="font-semibold">1.</span> Vercel dashboard &rarr; your project &rarr; <span class="font-semibold">Storage</span> &rarr; Create Database &rarr; <span class="font-semibold">Postgres</span>.</li>
-        <li><span class="font-semibold">2.</span> Connect it to this project. <code class="rounded bg-black/30 px-1">POSTGRES_URL</code> is injected for you.</li>
-        <li><span class="font-semibold">3.</span> Redeploy. Tables are created on the first request.</li>
+        <li><span class="font-semibold">1.</span> Supabase &rarr; Project Settings &rarr; <span class="font-semibold">Database</span> &rarr; Connection string &rarr; <span class="font-semibold">Transaction pooler</span> (port 6543).</li>
+        <li><span class="font-semibold">2.</span> Replace <code class="rounded bg-black/30 px-1">[YOUR-PASSWORD]</code> in it with your database password.</li>
+        <li><span class="font-semibold">3.</span> Vercel &rarr; Settings &rarr; Environment Variables &rarr; add it as <code class="rounded bg-black/30 px-1">POSTGRES_URL</code>.</li>
+        <li><span class="font-semibold">4.</span> Redeploy. Tables are created on the first request.</li>
       </ol>
       <p class="mt-2 text-xs text-amber-200/70">
-        That is the only required step. <code class="rounded bg-black/30 px-1">JWT_SECRET</code> is optional &mdash;
-        a signing key is derived from the database URL when it is not set.
+        Use the <span class="font-semibold">pooler</span> string, not the direct one &mdash; serverless opens many short-lived
+        connections. <code class="rounded bg-black/30 px-1">JWT_SECRET</code> is optional.
       </p>
       <p class="mt-3 text-xs text-amber-200/70">Tried: <span id="setupBannerTarget" class="font-mono"></span></p>
     </div>

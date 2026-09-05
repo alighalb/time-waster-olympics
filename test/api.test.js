@@ -32,7 +32,7 @@ function fakeSql(strings, ...vals) {
   }
   throw new Error('unhandled query: ' + q);
 }
-mock.module('@vercel/postgres', { exports: { sql: fakeSql } });
+mock.module('../lib/sql.js', { exports: { sql: fakeSql, raw: async () => ({ rows: [] }) } });
 
 const signup = (await import('../api/auth/signup.js')).default;
 const login  = (await import('../api/auth/login.js')).default;

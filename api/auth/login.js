@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { sql } from '../../lib/sql.js';
 import { publicUser } from '../../lib/db.js';
 import { handler, signToken, verifyPassword } from '../../lib/auth.js';
 

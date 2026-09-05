@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { sql } from '../lib/sql.js';
 import { getLeaderboard } from '../lib/db.js';
 import { authenticate, handler, MAX_SCORE } from '../lib/auth.js';
 
