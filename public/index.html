@@ -89,9 +89,28 @@
     <div id="setupBanner" class="hidden w-full max-w-2xl rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
       <p class="font-bold">No backend connected.</p>
       <p class="mt-1 text-amber-200/90">
-        This page is static; scores and logins need the Node server. Deploy <code class="rounded bg-black/30 px-1">server.js</code>
-        to a host that runs Node (Render, Railway, Fly.io), then set its URL in
-        <code class="rounded bg-black/30 px-1">public/config.js</code> and redeploy.
+        Netlify serves static files only, so there is no Node process here to answer
+        <code class="rounded bg-black/30 px-1">/api</code> or hold a WebSocket open.
+        Deploy the backend once, then point this page at it.
+      </p>
+      <ol class="mt-3 space-y-1.5 text-amber-200/90">
+        <li>
+          <span class="font-semibold">1.</span>
+          <a href="https://render.com/deploy?repo=https://github.com/alighalb/time-waster-olympics"
+             target="_blank" rel="noopener"
+             class="ml-1 inline-block rounded-lg bg-amber-400 px-3 py-1 text-xs font-bold text-amber-950 transition active:scale-95 hover:bg-amber-300">
+            Deploy backend to Render (free)
+          </a>
+        </li>
+        <li><span class="font-semibold">2.</span> Copy the URL Render gives you.</li>
+        <li>
+          <span class="font-semibold">3.</span> Put it in
+          <code class="rounded bg-black/30 px-1">public/config.js</code> and push:
+          <code class="mt-1 block rounded bg-black/40 px-2 py-1 text-xs">window.TWO_API_BASE = "https://your-app.onrender.com";</code>
+        </li>
+      </ol>
+      <p class="mt-3 text-xs text-amber-200/70">
+        Or skip Netlify entirely &mdash; the Render URL serves this same page and just works.
       </p>
       <p class="mt-1 text-xs text-amber-200/70">Tried: <span id="setupBannerTarget" class="font-mono"></span></p>
     </div>
@@ -246,6 +265,7 @@
   const ROUND_SECONDS = 15;
   const URGENT_AT = 5;
   const TOKEN_KEY = 'two_token';
+  const MAX_WS_RETRIES = 6;
 
   const $ = (id) => document.getElementById(id);
 
@@ -278,6 +298,7 @@
     tick: null,
     ws: null,
     wsRetry: 0,
+    wsGaveUp: false,
   };
 
   // ---------------------------------------------------------------------
@@ -643,7 +664,15 @@
 
     ws.addEventListener('close', () => {
       setLive('offline');
-      // Backoff reconnect, capped at 15s.
+      if (state.wsGaveUp) return;
+
+      // A server that is merely restarting comes back within a few tries. One that
+      // does not exist never will, so stop rather than spamming the console.
+      if (state.wsRetry >= MAX_WS_RETRIES) {
+        state.wsGaveUp = true;
+        setLive('offline');
+        return;
+      }
       const wait = Math.min(1000 * Math.pow(2, state.wsRetry++), 15000);
       setTimeout(connectSocket, wait);
     });
@@ -654,7 +683,7 @@
   // ---------------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------------
-  async function showBackendWarning() {
+  function showBackendWarning() {
     el.setupBannerTarget.textContent = (API_ORIGIN || location.origin) + '/api/leaderboard';
     el.setupBanner.classList.remove('hidden');
     el.authSubmit.disabled = true;
@@ -664,16 +693,17 @@
   async function boot() {
     setMode('login');
     resetGifPreview();
-    connectSocket();
 
-    // Confirm the API is actually there before letting anyone try to log in.
+    // Probe first. Opening a WebSocket to a host that has no server just produces
+    // an unsuppressable console error per attempt, so only dial once the API answers.
     try {
       const probe = await api('/leaderboard');
       renderLeaderboard(probe.leaderboard);
     } catch {
-      await showBackendWarning();
+      showBackendWarning();
       return;
     }
+    connectSocket();
 
     if (!state.token) return;
 
