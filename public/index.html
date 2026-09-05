@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Time-Waster Olympics</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+      background:
+        radial-gradient(1100px 600px at 15% -10%, rgba(168, 85, 247, 0.28), transparent 60%),
+        radial-gradient(900px 600px at 90% 0%, rgba(34, 211, 238, 0.22), transparent 55%),
+        #08070f;
+      min-height: 100vh;
+    }
+    .panel {
+      background: rgba(23, 20, 38, 0.72);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85);
+    }
+    /* Main smash button: chunky, springy, obviously alive. */
+    .smash {
+      background: linear-gradient(160deg, #f472b6 0%, #a855f7 45%, #6366f1 100%);
+      box-shadow: 0 14px 0 -2px #4c1d95, 0 26px 45px -12px rgba(168, 85, 247, 0.7);
+      transition: transform 90ms cubic-bezier(.34, 1.56, .64, 1), box-shadow 90ms ease, filter 150ms ease;
+    }
+    .smash:hover { filter: brightness(1.08); }
+    .smash:active {
+      transform: scale(.95) translateY(6px);
+      box-shadow: 0 4px 0 -2px #4c1d95, 0 10px 22px -12px rgba(168, 85, 247, 0.7);
+    }
+    .smash:disabled { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
+
+    /* Click counter pop on every hit. */
+    @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
+    .pop { animation: pop 160ms ease-out; }
+
+    /* Timer urgency: red + heartbeat under 5s. */
+    @keyframes urgent {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.12); opacity: .72; }
+    }
+    .urgent { animation: urgent 700ms ease-in-out infinite; }
+
+    @keyframes floatUp {
+      0%   { transform: translate(-50%, 0) scale(1); opacity: 1; }
+      100% { transform: translate(-50%, -90px) scale(1.5); opacity: 0; }
+    }
+    .float-up { animation: floatUp 700ms ease-out forwards; }
+
+    .shimmer {
+      background: linear-gradient(100deg, rgba(255,255,255,.04) 30%, rgba(255,255,255,.12) 50%, rgba(255,255,255,.04) 70%);
+      background-size: 200% 100%;
+      animation: shimmerMove 1.4s linear infinite;
+    }
+    @keyframes shimmerMove { to { background-position: -200% 0; } }
+
+    .row-enter { animation: rowIn 320ms ease-out; }
+    @keyframes rowIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .urgent, .pop, .float-up, .shimmer, .row-enter { animation: none !important; }
+      .smash { transition: none; }
+    }
+  </style>
+</head>
+
+<body class="text-slate-100">
+
+  <main class="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-6 px-4 py-8">
+
+    <!-- ===================== HEADER ===================== -->
+    <header class="text-center">
+      <h1 class="text-4xl font-black tracking-tight sm:text-5xl">
+        <span class="bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-300 bg-clip-text text-transparent">
+          Time-Waster Olympics
+        </span>
+      </h1>
+      <p class="mt-1 text-sm text-slate-400">15 seconds. One button. Zero productivity.</p>
+    </header>
+
+    <!-- ===================== AUTH SCREEN ===================== -->
+    <section id="authScreen" class="panel w-full max-w-md rounded-3xl p-6 sm:p-8">
+      <div class="mb-5 flex rounded-xl bg-black/30 p-1">
+        <button id="tabLogin"  class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Log in</button>
+        <button id="tabSignup" class="flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition">Sign up</button>
+      </div>
+
+      <form id="authForm" class="space-y-4" novalidate>
+        <div>
+          <label for="usernameInput" class="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">Username</label>
+          <input id="usernameInput" name="username" autocomplete="username" required
+                 class="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none transition placeholder:text-slate-600 focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/30"
+                 placeholder="clicky_mcclickface" />
+        </div>
+
+        <div>
+          <label for="passwordInput" class="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-400">Password</label>
+          <input id="passwordInput" name="password" type="password" autocomplete="current-password" required
+                 class="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm outline-none transition placeholder:text-slate-600 focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/30"
+                 placeholder="at least 6 characters" />
+        </div>
+
+        <!-- Avatar picker: signup only -->
+        <div id="avatarBlock" class="hidden space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Pick your GIF avatar</p>
+
+          <div class="flex gap-2">
+            <input id="gifSearchInput"
+                   class="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none transition placeholder:text-slate-600 focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-500/30"
+                   placeholder="cat, panic, coffee..." />
+            <button type="button" id="gifSearchBtn"
+                    class="shrink-0 rounded-xl bg-cyan-500/90 px-4 py-2 text-sm font-bold text-slate-950 transition active:scale-95 hover:bg-cyan-400 disabled:opacity-50">
+              Find
+            </button>
+          </div>
+
+          <!-- Preview stays hidden until a GIF actually loads; placeholder holds the space. -->
+          <div class="relative mx-auto h-36 w-36 overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+            <div id="gifPlaceholder" class="shimmer absolute inset-0 flex flex-col items-center justify-center gap-1 text-center">
+              <svg class="h-8 w-8 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                <rect x="3" y="3" width="18" height="18" rx="4" />
+                <circle cx="8.5" cy="9" r="1.6" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+              <span id="gifPlaceholderText" class="px-2 text-[11px] leading-tight text-slate-500">No GIF yet</span>
+            </div>
+            <img id="previewGif" alt="Your chosen avatar" class="hidden h-full w-full object-cover" />
+          </div>
+
+          <button type="button" id="gifRandomBtn"
+                  class="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-300 transition active:scale-95 hover:bg-white/10">
+            Surprise me
+          </button>
+        </div>
+
+        <p id="authError" class="hidden rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300"></p>
+
+        <button type="submit" id="authSubmit"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-indigo-500 px-4 py-3 text-sm font-black uppercase tracking-wide transition active:scale-95 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60">
+          <svg id="authSpinner" class="hidden h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25" />
+            <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+          </svg>
+          <span id="authSubmitText">Log in</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- ===================== GAME + LEADERBOARD ===================== -->
+    <div id="appScreen" class="hidden w-full grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+
+      <!-- Everything for the game lives in this one container, replay included. -->
+      <section class="panel flex flex-col items-center rounded-3xl p-6 sm:p-8">
+
+        <div class="mb-6 flex w-full items-center justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <img id="meGif" alt="" class="h-11 w-11 shrink-0 rounded-full border-2 border-fuchsia-400/60 object-cover" />
+            <div class="min-w-0">
+              <p id="meName" class="truncate text-sm font-bold"></p>
+              <p class="text-xs text-slate-400">Best: <span id="meBest" class="font-semibold text-cyan-300">0</span></p>
+            </div>
+          </div>
+          <button id="logoutBtn"
+                  class="shrink-0 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-400 transition active:scale-95 hover:bg-white/5 hover:text-slate-200">
+            Log out
+          </button>
+        </div>
+
+        <div class="mb-6 grid w-full grid-cols-2 gap-3">
+          <div class="rounded-2xl border border-white/10 bg-black/25 p-4 text-center">
+            <p class="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Time</p>
+            <p id="timerDisplay" class="mt-1 text-4xl font-black tabular-nums text-slate-100">15</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-black/25 p-4 text-center">
+            <p class="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Clicks</p>
+            <p id="clickDisplay" class="mt-1 text-4xl font-black tabular-nums text-cyan-300">0</p>
+          </div>
+        </div>
+
+        <div class="relative flex w-full justify-center py-2">
+          <button id="clickBtn"
+                  class="smash h-44 w-44 select-none rounded-full text-2xl font-black uppercase tracking-wide text-white sm:h-52 sm:w-52 sm:text-3xl">
+            <span id="clickBtnLabel">Smash</span>
+          </button>
+          <div id="floaters" class="pointer-events-none absolute inset-0"></div>
+        </div>
+
+        <p id="statusText" class="mt-5 min-h-[1.5rem] text-center text-sm text-slate-400">
+          Hit the button to start the clock.
+        </p>
+
+        <button id="replayBtn"
+                class="mt-4 hidden w-full max-w-xs rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-5 py-3 text-sm font-black uppercase tracking-wide text-cyan-200 transition active:scale-95 hover:bg-cyan-500/20">
+          Replay
+        </button>
+      </section>
+
+      <!-- Leaderboard: fed entirely by WebSocket pushes, never polled. -->
+      <aside class="panel rounded-3xl p-5 sm:p-6">
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="text-lg font-black">Top 10</h2>
+          <span id="liveBadge" class="flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
+            <span id="liveDot" class="h-2 w-2 rounded-full bg-slate-500"></span>
+            <span id="liveText">connecting</span>
+          </span>
+        </div>
+        <ol id="leaderboardList" class="space-y-2">
+          <li class="rounded-xl border border-white/5 bg-black/20 px-3 py-6 text-center text-sm text-slate-500">
+            Nobody has wasted any time yet.
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </main>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------------
+  // Config
+  // ---------------------------------------------------------------------
+  const API = '/api';
+  const GIPHY_KEY = 'YLZILNf5lCy2M908P6Z5FTA4jCKjtO4H';
+  const ROUND_SECONDS = 15;
+  const URGENT_AT = 5;
+  const TOKEN_KEY = 'two_token';
+
+  const $ = (id) => document.getElementById(id);
+
+  const el = {
+    authScreen: $('authScreen'), appScreen: $('appScreen'),
+    tabLogin: $('tabLogin'), tabSignup: $('tabSignup'),
+    authForm: $('authForm'), username: $('usernameInput'), password: $('passwordInput'),
+    avatarBlock: $('avatarBlock'), gifSearchInput: $('gifSearchInput'),
+    gifSearchBtn: $('gifSearchBtn'), gifRandomBtn: $('gifRandomBtn'),
+    previewGif: $('previewGif'), gifPlaceholder: $('gifPlaceholder'), gifPlaceholderText: $('gifPlaceholderText'),
+    authError: $('authError'), authSubmit: $('authSubmit'),
+    authSubmitText: $('authSubmitText'), authSpinner: $('authSpinner'),
+    meGif: $('meGif'), meName: $('meName'), meBest: $('meBest'), logoutBtn: $('logoutBtn'),
+    timer: $('timerDisplay'), clicks: $('clickDisplay'),
+    clickBtn: $('clickBtn'), clickBtnLabel: $('clickBtnLabel'), floaters: $('floaters'),
+    statusText: $('statusText'), replayBtn: $('replayBtn'),
+    board: $('leaderboardList'),
+    liveDot: $('liveDot'), liveText: $('liveText'),
+  };
+
+  const state = {
+    token: localStorage.getItem(TOKEN_KEY),
+    user: null,
+    mode: 'login',            // 'login' | 'signup'
+    gifUrl: '',
+    phase: 'idle',            // 'idle' | 'running' | 'over'
+    clicks: 0,
+    remaining: ROUND_SECONDS,
+    tick: null,
+    ws: null,
+    wsRetry: 0,
+  };
+
+  // ---------------------------------------------------------------------
+  // Tiny fetch wrapper — attaches the JWT, normalises errors
+  // ---------------------------------------------------------------------
+  async function api(path, { method = 'GET', body, auth = false } = {}) {
+    const headers = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (auth && state.token) headers['Authorization'] = 'Bearer ' + state.token;
+
+    const res = await fetch(API + path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+    let data = null;
+    try { data = await res.json(); } catch { /* empty or non-JSON body */ }
+
+    if (!res.ok) {
+      if (res.status === 401 && auth) logout();
+      throw new Error((data && data.error) || 'Request failed (' + res.status + ').');
+    }
+    return data;
+  }
+
+  // ---------------------------------------------------------------------
+  // Giphy avatar picker
+  // ---------------------------------------------------------------------
+  function showGif(url) {
+    state.gifUrl = url;
+    el.previewGif.src = url;
+    el.previewGif.classList.remove('hidden');   // only ever revealed on a real load
+    el.gifPlaceholder.classList.add('hidden');
+  }
+
+  function resetGifPreview(message) {
+    state.gifUrl = '';
+    el.previewGif.removeAttribute('src');
+    el.previewGif.classList.add('hidden');
+    el.gifPlaceholder.classList.remove('hidden');
+    el.gifPlaceholderText.textContent = message || 'No GIF yet';
+  }
+
+  // A broken URL must never leave a shattered-image icon on screen.
+  el.previewGif.addEventListener('error', () => resetGifPreview('That GIF would not load'));
+
+  async function fetchGif(query) {
+    el.gifSearchBtn.disabled = true;
+    el.gifRandomBtn.disabled = true;
+    el.previewGif.classList.add('hidden');
+    el.gifPlaceholder.classList.remove('hidden');
+    el.gifPlaceholderText.textContent = 'Searching Giphy...';
+
+    try {
+      const term = (query || '').trim();
+      const url = term
+        ? 'https://api.giphy.com/v1/gifs/search?api_key=' + GIPHY_KEY +
+          '&q=' + encodeURIComponent(term) + '&limit=25&rating=g'
+        : 'https://api.giphy.com/v1/gifs/trending?api_key=' + GIPHY_KEY + '&limit=25&rating=g';
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Giphy said ' + res.status);
+
+      const json = await res.json();
+      const items = (json && json.data) || [];
+      if (!items.length) { resetGifPreview('No GIFs for "' + term + '"'); return; }
+
+      const pick = items[Math.floor(Math.random() * items.length)];
+      const images = pick.images || {};
+      const src = (images.fixed_width_small && images.fixed_width_small.url)
+               || (images.fixed_width && images.fixed_width.url)
+               || (images.original && images.original.url);
+
+      if (!src) { resetGifPreview('That GIF had no usable image'); return; }
+      showGif(src);
+    } catch (err) {
+      console.error(err);
+      resetGifPreview('Giphy is not answering');
+    } finally {
+      el.gifSearchBtn.disabled = false;
+      el.gifRandomBtn.disabled = false;
+    }
+  }
+
+  el.gifSearchBtn.addEventListener('click', () => fetchGif(el.gifSearchInput.value));
+  el.gifRandomBtn.addEventListener('click', () => fetchGif(''));
+  el.gifSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); fetchGif(el.gifSearchInput.value); }
+  });
+
+  // ---------------------------------------------------------------------
+  // Auth UI
+  // ---------------------------------------------------------------------
+  function setMode(mode) {
+    state.mode = mode;
+    const on  = 'bg-white/10 text-white shadow';
+    const off = 'text-slate-400 hover:text-slate-200';
+
+    el.tabLogin.className  = 'flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ' + (mode === 'login' ? on : off);
+    el.tabSignup.className = 'flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ' + (mode === 'signup' ? on : off);
+
+    el.avatarBlock.classList.toggle('hidden', mode !== 'signup');
+    el.password.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+    el.authSubmitText.textContent = mode === 'signup' ? 'Create account' : 'Log in';
+    hideAuthError();
+  }
+
+  function showAuthError(message) {
+    el.authError.textContent = message;
+    el.authError.classList.remove('hidden');
+  }
+  function hideAuthError() {
+    el.authError.classList.add('hidden');
+    el.authError.textContent = '';
+  }
+
+  function setAuthLoading(loading, label) {
+    el.authSubmit.disabled = loading;
+    el.authSpinner.classList.toggle('hidden', !loading);
+    el.authSubmitText.textContent = loading
+      ? (label || 'Working...')
+      : (state.mode === 'signup' ? 'Create account' : 'Log in');
+  }
+
+  el.tabLogin.addEventListener('click', () => setMode('login'));
+  el.tabSignup.addEventListener('click', () => setMode('signup'));
+
+  el.authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideAuthError();
+
+    const username = el.username.value.trim();
+    const password = el.password.value;
+
+    if (!username || !password) { showAuthError('Username and password, please.'); return; }
+    if (state.mode === 'signup' && !state.gifUrl) {
+      showAuthError('Pick a GIF avatar first.');
+      return;
+    }
+
+    setAuthLoading(true, state.mode === 'signup' ? 'Creating account...' : 'Signing you in...');
+    try {
+      const payload = state.mode === 'signup'
+        ? { username, password, gif_url: state.gifUrl }
+        : { username, password };
+
+      const data = await api('/auth/' + state.mode, { method: 'POST', body: payload });
+
+      state.token = data.token;
+      localStorage.setItem(TOKEN_KEY, data.token);
+      enterGame(data.user);
+    } catch (err) {
+      showAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  });
+
+  el.logoutBtn.addEventListener('click', logout);
+
+  function logout() {
+    localStorage.removeItem(TOKEN_KEY);
+    state.token = null;
+    state.user = null;
+    stopRound(false);
+    el.appScreen.classList.add('hidden');
+    el.appScreen.classList.remove('grid');
+    el.authScreen.classList.remove('hidden');
+    el.password.value = '';
+    resetGifPreview();
+    setMode('login');
+  }
+
+  function enterGame(user) {
+    state.user = user;
+    el.authScreen.classList.add('hidden');
+    el.appScreen.classList.remove('hidden');
+    el.appScreen.classList.add('grid');
+
+    el.meName.textContent = user.username;
+    el.meBest.textContent = user.highScore;
+    el.meGif.src = user.gifUrl;
+
+    resetRound();
+  }
+
+  // ---------------------------------------------------------------------
+  // Game loop
+  // ---------------------------------------------------------------------
+  function paintTimer() {
+    el.timer.textContent = state.remaining;
+    const urgent = state.phase === 'running' && state.remaining <= URGENT_AT;
+    el.timer.classList.toggle('text-red-500', urgent);
+    el.timer.classList.toggle('urgent', urgent);
+    el.timer.classList.toggle('text-slate-100', !urgent);
+  }
+
+  function resetRound() {
+    stopRound(false);
+    state.phase = 'idle';
+    state.clicks = 0;
+    state.remaining = ROUND_SECONDS;
+
+    el.clicks.textContent = '0';
+    el.clickBtn.disabled = false;
+    el.clickBtnLabel.textContent = 'Smash';
+    el.replayBtn.classList.add('hidden');
+    el.statusText.textContent = 'Hit the button to start the clock.';
+    el.floaters.replaceChildren();
+    paintTimer();
+  }
+
+  function stopRound(finished) {
+    if (state.tick) { clearInterval(state.tick); state.tick = null; }
+    if (finished) state.phase = 'over';
+  }
+
+  function startRound() {
+    state.phase = 'running';
+    state.remaining = ROUND_SECONDS;
+    el.statusText.textContent = 'GO. Do not stop.';
+    paintTimer();
+
+    state.tick = setInterval(() => {
+      state.remaining -= 1;
+      paintTimer();
+      if (state.remaining <= 0) endRound();
+    }, 1000);
+  }
+
+  function floater(text) {
+    const span = document.createElement('span');
+    span.className = 'float-up absolute text-lg font-black text-cyan-200';
+    span.style.left = (35 + Math.random() * 30) + '%';
+    span.style.top = '35%';
+    span.textContent = text;
+    el.floaters.appendChild(span);
+    setTimeout(() => span.remove(), 700);
+  }
+
+  el.clickBtn.addEventListener('click', () => {
+    if (state.phase === 'over') return;
+    if (state.phase === 'idle') startRound();
+
+    state.clicks += 1;
+    el.clicks.textContent = state.clicks;
+
+    el.clicks.classList.remove('pop');
+    void el.clicks.offsetWidth;   // restart the animation
+    el.clicks.classList.add('pop');
+
+    if (state.clicks % 5 === 0) floater('+5');
+  });
+
+  async function endRound() {
+    stopRound(true);
+    state.remaining = 0;
+    paintTimer();
+
+    el.clickBtn.disabled = true;
+    el.clickBtnLabel.textContent = 'Done';
+    el.replayBtn.classList.remove('hidden');
+    el.statusText.textContent = 'Time. ' + state.clicks + ' clicks — saving...';
+
+    try {
+      const data = await api('/score', {
+        method: 'POST',
+        auth: true,
+        body: { score: state.clicks },
+      });
+
+      el.meBest.textContent = data.highScore;
+      if (state.user) state.user.highScore = data.highScore;
+
+      el.statusText.textContent = data.isNewHighScore
+        ? 'NEW PERSONAL BEST: ' + data.highScore + ' clicks.'
+        : state.clicks + ' clicks. Your best is still ' + data.highScore + '.';
+
+      // The WS push normally beats this, but render it anyway for a lone player.
+      renderLeaderboard(data.leaderboard);
+    } catch (err) {
+      el.statusText.textContent = 'Score not saved: ' + err.message;
+    }
+  }
+
+  el.replayBtn.addEventListener('click', resetRound);
+
+  // ---------------------------------------------------------------------
+  // Leaderboard over WebSockets (no polling)
+  // ---------------------------------------------------------------------
+  function setLive(status) {
+    const map = {
+      live:    ['bg-emerald-400', 'live'],
+      connecting: ['bg-amber-400', 'connecting'],
+      offline: ['bg-red-500', 'offline'],
+    };
+    const [dot, text] = map[status] || map.offline;
+    el.liveDot.className = 'h-2 w-2 rounded-full ' + dot + (status === 'live' ? ' animate-pulse' : '');
+    el.liveText.textContent = text;
+  }
+
+  function renderLeaderboard(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      el.board.innerHTML =
+        '<li class="rounded-xl border border-white/5 bg-black/20 px-3 py-6 text-center text-sm text-slate-500">' +
+        'Nobody has wasted any time yet.</li>';
+      return;
+    }
+
+    const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
+    const frag = document.createDocumentFragment();
+
+    rows.forEach((row) => {
+      const mine = state.user && row.id === state.user.id;
+
+      const li = document.createElement('li');
+      li.className = 'row-enter flex items-center gap-3 rounded-xl border px-3 py-2 transition ' +
+        (mine ? 'border-fuchsia-400/50 bg-fuchsia-500/10' : 'border-white/5 bg-black/20');
+
+      const rank = document.createElement('span');
+      rank.className = 'w-7 shrink-0 text-center text-sm font-black text-slate-400';
+      rank.textContent = medals[row.rank - 1] || row.rank;
+
+      const img = document.createElement('img');
+      img.className = 'h-9 w-9 shrink-0 rounded-full border border-white/10 object-cover bg-black/40';
+      img.alt = '';
+      img.src = row.gifUrl;
+      img.addEventListener('error', () => img.classList.add('opacity-0'));
+
+      const name = document.createElement('span');
+      name.className = 'min-w-0 flex-1 truncate text-sm font-semibold';
+      name.textContent = row.username;   // textContent, so usernames cannot inject markup
+
+      const score = document.createElement('span');
+      score.className = 'shrink-0 text-sm font-black tabular-nums text-cyan-300';
+      score.textContent = row.highScore;
+
+      li.append(rank, img, name, score);
+      frag.appendChild(li);
+    });
+
+    el.board.replaceChildren(frag);
+  }
+
+  function connectSocket() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(proto + '//' + location.host + '/ws');
+    state.ws = ws;
+    setLive('connecting');
+
+    ws.addEventListener('open', () => { state.wsRetry = 0; setLive('live'); });
+
+    ws.addEventListener('message', (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      if (msg && msg.type === 'leaderboard') renderLeaderboard(msg.leaderboard);
+    });
+
+    ws.addEventListener('close', () => {
+      setLive('offline');
+      // Backoff reconnect, capped at 15s.
+      const wait = Math.min(1000 * Math.pow(2, state.wsRetry++), 15000);
+      setTimeout(connectSocket, wait);
+    });
+
+    ws.addEventListener('error', () => ws.close());
+  }
+
+  // ---------------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------------
+  async function boot() {
+    setMode('login');
+    resetGifPreview();
+    connectSocket();
+
+    if (!state.token) return;
+
+    // A stored JWT should survive a reload — verify it before trusting it.
+    setAuthLoading(true, 'Restoring session...');
+    try {
+      const data = await api('/me', { auth: true });
+      enterGame(data.user);
+    } catch {
+      logout();
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
