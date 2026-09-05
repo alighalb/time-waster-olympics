@@ -57,6 +57,37 @@ CREATE TABLE users (
 );
 ```
 
+## Deploying
+
+`server.js` needs a **persistent Node process** — it holds open WebSocket connections and
+writes a SQLite file. Static hosts (Netlify, GitHub Pages, Vercel's static output) cannot
+run it, and serverless functions cannot either: they have no long-lived sockets and an
+ephemeral filesystem, so the leaderboard would reset constantly.
+
+### Option A — one host for everything (simplest)
+
+Express already serves `public/`, so a single Node host runs the whole game.
+`render.yaml` is set up for [Render](https://render.com): New -> Blueprint -> pick this repo.
+Leave `public/config.js` empty; the page talks to its own origin. Railway and Fly.io work
+the same way.
+
+### Option B — Netlify frontend + separate backend
+
+Netlify serves the static page only. `netlify.toml` already sets `publish = "public"`,
+which is what makes `index.html` resolve — without it Netlify looks in the repo root and
+returns "Page not found".
+
+1. Deploy the backend first (Option A) and copy its URL.
+2. Put that URL in `public/config.js`:
+   ```js
+   window.TWO_API_BASE = "https://your-backend.onrender.com";
+   ```
+3. Commit, push; Netlify redeploys.
+
+If the API is unreachable the page shows a warning banner and disables login rather than
+failing silently. Restrict `ALLOWED_ORIGINS` on the backend to your Netlify domain once
+things work.
+
 ## Notes for deployment
 
 The Giphy key is in `public/index.html` and is therefore public — it is a browser-side

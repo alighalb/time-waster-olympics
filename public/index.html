@@ -85,6 +85,17 @@
       <p class="mt-1 text-sm text-slate-400">15 seconds. One button. Zero productivity.</p>
     </header>
 
+    <!-- Shown only when the API cannot be reached (e.g. static host, no backend configured). -->
+    <div id="setupBanner" class="hidden w-full max-w-2xl rounded-2xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+      <p class="font-bold">No backend connected.</p>
+      <p class="mt-1 text-amber-200/90">
+        This page is static; scores and logins need the Node server. Deploy <code class="rounded bg-black/30 px-1">server.js</code>
+        to a host that runs Node (Render, Railway, Fly.io), then set its URL in
+        <code class="rounded bg-black/30 px-1">public/config.js</code> and redeploy.
+      </p>
+      <p class="mt-1 text-xs text-amber-200/70">Tried: <span id="setupBannerTarget" class="font-mono"></span></p>
+    </div>
+
     <!-- ===================== AUTH SCREEN ===================== -->
     <section id="authScreen" class="panel w-full max-w-md rounded-3xl p-6 sm:p-8">
       <div class="mb-5 flex rounded-xl bg-black/30 p-1">
@@ -220,6 +231,7 @@
     </div>
   </main>
 
+<script src="config.js"></script>
 <script>
 (() => {
   'use strict';
@@ -227,7 +239,9 @@
   // ---------------------------------------------------------------------
   // Config
   // ---------------------------------------------------------------------
-  const API = '/api';
+  // Empty TWO_API_BASE == same origin (the Node server is serving this page).
+  const API_ORIGIN = String(window.TWO_API_BASE || '').replace(/\/+$/, '');
+  const API = API_ORIGIN + '/api';
   const GIPHY_KEY = 'YLZILNf5lCy2M908P6Z5FTA4jCKjtO4H';
   const ROUND_SECONDS = 15;
   const URGENT_AT = 5;
@@ -249,6 +263,7 @@
     clickBtn: $('clickBtn'), clickBtnLabel: $('clickBtnLabel'), floaters: $('floaters'),
     statusText: $('statusText'), replayBtn: $('replayBtn'),
     board: $('leaderboardList'),
+    setupBanner: $('setupBanner'), setupBannerTarget: $('setupBannerTarget'),
     liveDot: $('liveDot'), liveText: $('liveText'),
   };
 
@@ -608,9 +623,13 @@
     el.board.replaceChildren(frag);
   }
 
+  function socketUrl() {
+    if (API_ORIGIN) return API_ORIGIN.replace(/^http/, 'ws') + '/ws';
+    return (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws';
+  }
+
   function connectSocket() {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(proto + '//' + location.host + '/ws');
+    const ws = new WebSocket(socketUrl());
     state.ws = ws;
     setLive('connecting');
 
@@ -635,10 +654,26 @@
   // ---------------------------------------------------------------------
   // Boot
   // ---------------------------------------------------------------------
+  async function showBackendWarning() {
+    el.setupBannerTarget.textContent = (API_ORIGIN || location.origin) + '/api/leaderboard';
+    el.setupBanner.classList.remove('hidden');
+    el.authSubmit.disabled = true;
+    el.authSubmitText.textContent = 'Backend unavailable';
+  }
+
   async function boot() {
     setMode('login');
     resetGifPreview();
     connectSocket();
+
+    // Confirm the API is actually there before letting anyone try to log in.
+    try {
+      const probe = await api('/leaderboard');
+      renderLeaderboard(probe.leaderboard);
+    } catch {
+      await showBackendWarning();
+      return;
+    }
 
     if (!state.token) return;
 

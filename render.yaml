@@ -1,0 +1,21 @@
+# One-click backend deploy: https://render.com -> New -> Blueprint -> point at this repo.
+# Render runs a persistent Node process, so WebSockets and the SQLite file both survive.
+services:
+  - type: web
+    name: time-waster-olympics
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /api/leaderboard
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true      # Render generates and stores a strong secret
+      - key: DB_PATH
+        value: /var/data/data.db
+      - key: ALLOWED_ORIGINS
+        value: "*"
+    disk:
+      name: sqlite-data          # without a disk, the free tier wipes the DB on restart
+      mountPath: /var/data
+      sizeGB: 1

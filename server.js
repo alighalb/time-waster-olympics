@@ -28,6 +28,11 @@ const BCRYPT_ROUNDS = 12;
 const LEADERBOARD_SIZE = 10;
 const MAX_SCORE = 100000; // sanity ceiling; a human cannot out-click this
 
+// Comma-separated list, or '*' for any. Auth is Bearer-token (no cookies), so a
+// permissive default cannot be abused via a browser's ambient credentials.
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*')
+  .split(',').map((o) => o.trim()).filter(Boolean);
+
 // A generated secret means every restart invalidates old tokens. Fine for local
 // dev, not for anything you leave running — set JWT_SECRET in the environment.
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
@@ -151,6 +156,24 @@ function validateCredentials(username, password) {
 // ---------------------------------------------------------------------------
 
 const app = express();
+
+// The frontend may be served from another host (Netlify, GitHub Pages, ...).
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (origin) {
+    const allowed = ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin);
+    if (allowed) {
+      res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS.includes('*') ? '*' : origin);
+      res.set('Vary', 'Origin');
+      res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.set('Access-Control-Max-Age', '86400');
+    }
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json({ limit: '16kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
