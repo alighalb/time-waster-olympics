@@ -130,5 +130,23 @@ test('leaderboard ranks correctly and hides zero scores', async () => {
 test('wrong HTTP method returns 405', async () => {
   const r = await call(board, { method: 'DELETE' });
   assert.equal(r.code, 405);
-  assert.equal(r.headers.Allow, 'GET');
+  assert.equal(r.headers.Allow, 'GET, HEAD');
+});
+
+test('missing config reports every absent variable at once', async () => {
+  const savedJwt = process.env.JWT_SECRET, savedPg = process.env.POSTGRES_URL;
+  delete process.env.JWT_SECRET; delete process.env.POSTGRES_URL;
+  try {
+    const r = await call(board, { method: 'GET' });
+    assert.equal(r.code, 503);
+    assert.deepEqual(r.body.missing, ['JWT_SECRET', 'POSTGRES_URL']);
+    assert.match(r.body.error, /JWT_SECRET and POSTGRES_URL/);
+  } finally {
+    process.env.JWT_SECRET = savedJwt; process.env.POSTGRES_URL = savedPg;
+  }
+});
+
+test('HEAD is accepted wherever GET is', async () => {
+  const r = await call(board, { method: 'HEAD' });
+  assert.notEqual(r.code, 405);
 });
