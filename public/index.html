@@ -25,18 +25,65 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
       box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85);
     }
-    /* Main smash button: chunky, springy, obviously alive. */
+    /* Main smash button: a physical key sitting on a rim, pressed into it. */
     .smash {
+      --depth: 14px;
+      position: relative;
+      isolation: isolate;
+      border: none;
+      touch-action: manipulation;              /* no 300ms tap delay, no double-fire */
+      -webkit-tap-highlight-color: transparent;
       background: linear-gradient(160deg, #f472b6 0%, #a855f7 45%, #6366f1 100%);
-      box-shadow: 0 14px 0 -2px #4c1d95, 0 26px 45px -12px rgba(168, 85, 247, 0.7);
-      transition: transform 90ms cubic-bezier(.34, 1.56, .64, 1), box-shadow 90ms ease, filter 150ms ease;
+      box-shadow:
+        0 var(--depth) 0 -2px #4c1d95,                    /* the rim it rests on */
+        0 calc(var(--depth) + 12px) 45px -12px rgba(168, 85, 247, .7),
+        inset 0 3px 6px rgba(255, 255, 255, .45),         /* top bevel */
+        inset 0 -6px 12px rgba(76, 29, 149, .55);         /* bottom shading */
+      transition:
+        transform 70ms cubic-bezier(.2, .9, .3, 1.2),
+        box-shadow 70ms ease,
+        filter 150ms ease;
+    }
+    /* Specular sheen across the cap. */
+    .smash::before {
+      content: '';
+      position: absolute;
+      inset: 6% 8% 45% 8%;
+      border-radius: 50%;
+      background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0));
+      pointer-events: none;
+      z-index: -1;
+      transition: opacity 70ms ease;
     }
     .smash:hover { filter: brightness(1.08); }
-    .smash:active {
-      transform: scale(.95) translateY(6px);
-      box-shadow: 0 4px 0 -2px #4c1d95, 0 10px 22px -12px rgba(168, 85, 247, 0.7);
+
+    /* Driven by pointerdown rather than :active, so the key is already down
+       by the time the browser would have dispatched a click. */
+    .smash.is-down {
+      transform: translateY(calc(var(--depth) - 3px)) scaleX(1.03) scaleY(.94);
+      box-shadow:
+        0 3px 0 -2px #4c1d95,
+        0 6px 14px -10px rgba(168, 85, 247, .7),
+        inset 0 2px 4px rgba(255, 255, 255, .25),
+        inset 0 -2px 6px rgba(76, 29, 149, .7);
+      filter: brightness(.94);
     }
+    .smash.is-down::before { opacity: .35; }
     .smash:disabled { filter: grayscale(.7) brightness(.7); cursor: not-allowed; }
+    .smash:disabled.is-down { transform: none; }
+
+    /* Ripple struck at the exact point of contact. */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      background: radial-gradient(circle, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 70%);
+      pointer-events: none;
+      animation: rippleOut 420ms ease-out forwards;
+    }
+    @keyframes rippleOut {
+      to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+    }
 
     /* Click counter pop on every hit. */
     @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.22); } 100% { transform: scale(1); } }
@@ -68,6 +115,7 @@
     @media (prefers-reduced-motion: reduce) {
       .urgent, .pop, .float-up, .shimmer, .row-enter { animation: none !important; }
       .smash { transition: none; }
+      .ripple { animation: none; display: none; }
     }
   </style>
 </head>
@@ -208,6 +256,15 @@
             <span id="clickBtnLabel">Smash</span>
           </button>
           <div id="floaters" class="pointer-events-none absolute inset-0"></div>
+          <button id="soundBtn" type="button" aria-pressed="true" title="Toggle click sound"
+                  class="absolute right-0 top-0 rounded-lg border border-white/10 bg-black/30 p-2 text-slate-300 transition active:scale-90 hover:bg-white/10 hover:text-white">
+            <svg id="soundOn" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7" /><path d="M18.5 5.5a9 9 0 0 1 0 13" />
+            </svg>
+            <svg id="soundOff" class="hidden h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="m23 9-6 6" /><path d="m17 9 6 6" />
+            </svg>
+          </button>
         </div>
 
         <p id="statusText" class="mt-5 min-h-[1.5rem] text-center text-sm text-slate-400">
@@ -253,6 +310,7 @@
   const ROUND_SECONDS = 15;
   const URGENT_AT = 5;
   const TOKEN_KEY = 'two_token';
+  const MUTE_KEY = 'two_muted';
   const POLL_MS = 4000;   // leaderboard auto-refresh interval
 
   const $ = (id) => document.getElementById(id);
@@ -269,6 +327,7 @@
     meGif: $('meGif'), meName: $('meName'), meBest: $('meBest'), logoutBtn: $('logoutBtn'),
     timer: $('timerDisplay'), clicks: $('clickDisplay'),
     clickBtn: $('clickBtn'), clickBtnLabel: $('clickBtnLabel'), floaters: $('floaters'),
+    soundBtn: $('soundBtn'), soundOn: $('soundOn'), soundOff: $('soundOff'),
     statusText: $('statusText'), replayBtn: $('replayBtn'),
     board: $('leaderboardList'),
     setupBanner: $('setupBanner'), setupBannerTarget: $('setupBannerTarget'),
@@ -288,6 +347,7 @@
     tick: null,
     poll: null,
     pollFailures: 0,
+    muted: (() => { try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; } })(),
   };
 
   // ---------------------------------------------------------------------
@@ -496,6 +556,7 @@
     state.remaining = ROUND_SECONDS;
 
     el.clicks.textContent = '0';
+    el.clickBtn.classList.remove('is-down');
     el.clickBtn.disabled = false;
     el.clickBtnLabel.textContent = 'Smash';
     el.replayBtn.classList.add('hidden');
@@ -532,9 +593,103 @@
     setTimeout(() => span.remove(), 700);
   }
 
-  el.clickBtn.addEventListener('click', () => {
-    if (state.phase === 'over') return;
+  // ---------------------------------------------------------------------
+  // Click sound, synthesised rather than loaded
+  // ---------------------------------------------------------------------
+  // A real switch makes two sounds: a sharp one going down and a lighter one coming
+  // back up. Both are a filtered noise transient plus a short pitched body. Generating
+  // them costs no network request and never runs out of overlapping voices.
+  let ctx = null, master = null, noise = null;
+
+  function audio() {
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume();   // tabs suspend it when backgrounded
+      return ctx;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;                            // no Web Audio: stay silent, keep playing
+
+    ctx = new AC();
+    master = ctx.createGain();
+    master.gain.value = state.muted ? 0 : 0.9;
+    master.connect(ctx.destination);
+
+    // One second of white noise, reused by every click.
+    noise = ctx.createBuffer(1, ctx.sampleRate * 0.2, ctx.sampleRate);
+    const data = noise.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+    return ctx;
+  }
+
+  function playClick(down) {
+    const c = audio();
+    if (!c || state.muted) return;
+    const t = c.currentTime;
+
+    // Transient: the plastic edge of the click.
+    const src = c.createBufferSource();
+    src.buffer = noise;
+    src.playbackRate.value = 0.9 + Math.random() * 0.2;   // tiny variation, less machine-gun
+    const bp = c.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = down ? 2400 : 3300;
+    bp.Q.value = 1.1;
+    const ng = c.createGain();
+    ng.gain.setValueAtTime(down ? 0.5 : 0.22, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + (down ? 0.028 : 0.016));
+    src.connect(bp).connect(ng).connect(master);
+    src.start(t);
+    src.stop(t + 0.06);
+
+    // Body: the thock of the key bottoming out.
+    const osc = c.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(down ? 190 : 280, t);
+    osc.frequency.exponentialRampToValueAtTime(down ? 95 : 170, t + 0.03);
+    const og = c.createGain();
+    og.gain.setValueAtTime(down ? 0.3 : 0.1, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    osc.connect(og).connect(master);
+    osc.start(t);
+    osc.stop(t + 0.07);
+  }
+
+  function setMuted(muted) {
+    state.muted = muted;
+    try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch { /* private mode */ }
+    if (master) master.gain.value = muted ? 0 : 0.9;
+    el.soundOn.classList.toggle('hidden', muted);
+    el.soundOff.classList.toggle('hidden', !muted);
+    el.soundBtn.setAttribute('aria-pressed', String(!muted));
+  }
+
+  el.soundBtn.addEventListener('click', () => setMuted(!state.muted));
+
+  // ---------------------------------------------------------------------
+  // The press itself
+  // ---------------------------------------------------------------------
+  function ripple(clientX, clientY) {
+    const r = el.clickBtn.getBoundingClientRect();
+    const span = document.createElement('span');
+    span.className = 'ripple';
+    const size = r.width * 0.9;
+    span.style.width = span.style.height = size + 'px';
+    // Centre the ripple when the press came from the keyboard rather than a pointer.
+    span.style.left = (clientX == null ? r.width / 2 : clientX - r.left) + 'px';
+    span.style.top = (clientY == null ? r.height / 2 : clientY - r.top) + 'px';
+    el.clickBtn.appendChild(span);
+    setTimeout(() => span.remove(), 430);
+  }
+
+  function press(clientX, clientY) {
+    if (state.phase === 'over' || el.clickBtn.disabled) return;
     if (state.phase === 'idle') startRound();
+
+    el.clickBtn.classList.add('is-down');
+    playClick(true);
+    ripple(clientX, clientY);
+    if (navigator.vibrate) navigator.vibrate(8);   // a real bump on phones
 
     state.clicks += 1;
     el.clicks.textContent = state.clicks;
@@ -544,13 +699,43 @@
     el.clicks.classList.add('pop');
 
     if (state.clicks % 5 === 0) floater('+5');
+  }
+
+  function release() {
+    if (!el.clickBtn.classList.contains('is-down')) return;
+    el.clickBtn.classList.remove('is-down');
+    playClick(false);
+  }
+
+  // Counting on pointerdown rather than click is what makes this feel physical:
+  // a click event does not fire until the button comes back up.
+  el.clickBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();          // no text selection, no synthetic double-fire on touch
+    el.clickBtn.setPointerCapture?.(e.pointerId);
+    press(e.clientX, e.clientY);
   });
+  el.clickBtn.addEventListener('pointerup', release);
+  el.clickBtn.addEventListener('pointercancel', release);
+  el.clickBtn.addEventListener('pointerleave', release);
+
+  // Keyboard parity: Space and Enter behave like a press, without key repeat.
+  el.clickBtn.addEventListener('keydown', (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    if (e.repeat) return;
+    press(null, null);
+  });
+  el.clickBtn.addEventListener('keyup', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') release();
+  });
+  el.clickBtn.addEventListener('blur', release);
 
   async function endRound() {
     stopRound(true);
     state.remaining = 0;
     paintTimer();
 
+    el.clickBtn.classList.remove('is-down');
     el.clickBtn.disabled = true;
     el.clickBtnLabel.textContent = 'Done';
     el.replayBtn.classList.remove('hidden');
@@ -696,6 +881,7 @@
   }
 
   async function boot() {
+    setMuted(state.muted);
     setMode('login');
     resetGifPreview();
 
