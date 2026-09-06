@@ -25,6 +25,11 @@ function fakeSql(strings, ...vals) {
   if (/^UPDATE users SET gif_url/i.test(q)) {
     const u = users.find(u => u.id === vals[1]); if (u) u.gif_url = vals[0]; return { rows: [] };
   }
+  if (/^DELETE FROM users WHERE id/i.test(q)) {
+    const i = users.findIndex(u => u.id === vals[0]);
+    if (i >= 0) users.splice(i, 1);
+    return { rows: [] };
+  }
   if (/^UPDATE users SET high_score/i.test(q)) {
     const u = users.find(u => u.id === vals[1]);
     if (u && u.high_score < vals[2]) { u.high_score = vals[0]; return { rows: [{ high_score: u.high_score }] }; }
@@ -162,4 +167,18 @@ test('JWT_SECRET is optional: a stable key is derived from the database URL', as
 test('HEAD is accepted wherever GET is', async () => {
   const r = await call(board, { method: 'HEAD' });
   assert.notEqual(r.code, 405);
+});
+
+test('DELETE /api/me removes only the caller and needs a token', async () => {
+  const s = await call(signup, { body: { username: 'tempuser', password: 'secret123', gif_url: 'https://g/t.gif' } });
+  const before = (await call(board, { method: 'GET' })).body.leaderboard.length;
+
+  assert.equal((await call(me, { method: 'DELETE' })).code, 401);          // no token
+  const r = await call(me, { method: 'DELETE', headers: { authorization: 'Bearer ' + s.body.token } });
+  assert.equal(r.code, 200);
+  assert.equal(r.body.deleted, true);
+
+  // the caller is gone, and nobody else was touched
+  assert.equal((await call(me, { method: 'GET', headers: { authorization: 'Bearer ' + s.body.token } })).code, 401);
+  assert.equal((await call(board, { method: 'GET' })).body.leaderboard.length, before);
 });
